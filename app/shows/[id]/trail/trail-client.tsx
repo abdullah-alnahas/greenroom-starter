@@ -169,20 +169,20 @@ export function TrailClient({ trail, deal, finalPayout, initialPayout }: Props) 
         />
       )}
 
-      {/* Math strip for unsupported deal types — ledger-projection */}
-      {showsCalcGap && initialPayout != null && finalPayout != null && (
-        <MathStrip
-          dealType={deal!.dealType}
-          initial={initialPayout}
-          final={finalPayout}
-          onJump={jumpToEntry}
-        />
-      )}
-
-      {/* Pre-show diff — ledger-projection */}
-      {trail.dealDiff.length > 0 && (
-        <DealDiffStrip diff={trail.dealDiff} onJump={jumpToEntry} />
-      )}
+      {/* Structured AI summary — one card combining the payout-interpretation
+          readings (calc-engine gap) and deal-change projections. Both
+          sub-sections are projections of audit_log entries, click any row
+          or card to jump back to its source entry. */}
+      <StructuredAiSummaryCard
+        dealType={deal?.dealType ?? null}
+        initial={initialPayout}
+        final={finalPayout}
+        showReadings={
+          !!(showsCalcGap && initialPayout != null && finalPayout != null)
+        }
+        diff={trail.dealDiff}
+        onJump={jumpToEntry}
+      />
 
       {/* Section header + controls */}
       <div className="mt-10 mb-4 flex items-end justify-between flex-wrap gap-4">
@@ -504,70 +504,173 @@ function SourceSpan({
   );
 }
 
-// ─── Math strip ───────────────────────────────────────────────────────────
+// ─── Structured AI summary ────────────────────────────────────────────────
+// One card. Two sub-sections (payout readings + deal changes). Both are
+// projections of audit_log entries; every row jumps to its source entry.
 
-function MathStrip({
+function StructuredAiSummaryCard({
   dealType,
   initial,
   final,
+  showReadings,
+  diff,
   onJump,
 }: {
-  dealType: string;
-  initial: number;
-  final: number;
+  dealType: string | null;
+  initial: number | null;
+  final: number | null;
+  showReadings: boolean;
+  diff: {
+    field: string;
+    before: string;
+    after: string;
+    source: string;
+    sourceEntryIds: string[];
+    warning?: string;
+  }[];
   onJump: (entryId: string) => void;
 }) {
+  if (!showReadings && diff.length === 0) return null;
+
+  // Total unique source entry IDs cited by this card.
+  const cited = new Set<string>();
+  if (showReadings) {
+    cited.add("entry_at_table_signoff");
+    cited.add("entry_marcus_resolution");
+  }
+  diff.forEach((d) => d.sourceEntryIds.forEach((id) => cited.add(id)));
+
   return (
-    <div className="my-6 rounded-xl bg-white ring-1 ring-ink-200/80 p-5">
-      <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+    <div className="my-6 rounded-xl bg-white ring-1 ring-ink-200/80 overflow-hidden">
+      {/* Card header */}
+      <div className="px-5 py-4 border-b border-ink-100 flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-500">
-            Two readings of the math · ledger-derived
+          <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-700 mb-1">
+            <Sparkles className="h-3 w-3" />
+            Structured AI summary · ledger-derived
           </div>
-          <div className="text-[12px] text-ink-400 mt-1 max-w-xl leading-relaxed">
-            Calc engine can’t compute{" "}
-            <code className="font-mono text-ink-700 bg-canvas-soft px-1 rounded">
-              {dealType}
-            </code>{" "}
-            deals, so both numbers below come from ledger entries — the
-            payouts recorded at signoff and at dispute resolution — not from
-            an in-app calculation.
+          <div className="text-[12px] text-ink-500 max-w-2xl leading-relaxed">
+            Both sections below are projections of{" "}
+            <code className="font-mono bg-canvas-soft px-1 rounded">
+              audit_log
+            </code>
+            . Click any row or card to jump to its source entry. Ledger
+            governs when summary disagrees.
           </div>
         </div>
+        <PlainBadge>{cited.size} sources cited</PlainBadge>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <ReadingCard
-          label="Venue’s read"
-          subtitle="recoup off gross, then cap"
-          amount={initial}
-          tone="ink"
-          sourceEntryId="entry_at_table_signoff"
-          sourceLabel="from signoff entry"
-          onJump={onJump}
-        />
-        <ReadingCard
-          label="Settled read"
-          subtitle="recoup inside cap"
-          amount={final}
-          tone="brand"
-          sourceEntryId="entry_marcus_resolution"
-          sourceLabel="from resolution entry"
-          onJump={onJump}
-        />
-      </div>
-      <div className="text-[11px] text-ink-400 mt-3 leading-relaxed">
-        Diff:{" "}
-        <span className="text-ink-700 font-medium tabular">
-          {formatMoney(final - initial)}
-        </span>{" "}
-        — venue absorbed the difference. The interpretations on each card
-        come from the dispute messages on the ledger.
-      </div>
+
+      {/* Section 1: Payout interpretations */}
+      {showReadings && initial != null && final != null && (
+        <div className="px-5 py-4 border-b border-ink-100">
+          <div className="flex items-center justify-between mb-2.5 gap-3 flex-wrap">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-700">
+              Payout interpretations
+            </div>
+            <div className="text-[11px] text-ink-400">
+              calc engine doesn’t compute{" "}
+              <code className="font-mono text-ink-600 bg-canvas-soft px-1 rounded">
+                {dealType}
+              </code>{" "}
+              — numbers from ledger entries
+            </div>
+          </div>
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-stretch">
+            <PayoutReadingCard
+              label="Venue’s read"
+              subtitle="recoup off gross, then cap"
+              amount={initial}
+              tone="ink"
+              sourceEntryId="entry_at_table_signoff"
+              sourceLabel="from signoff entry"
+              onJump={onJump}
+            />
+            <div className="flex flex-col items-center justify-center px-2">
+              <ArrowRight className="h-4 w-4 text-ink-300" />
+              <div className="text-[10px] text-ink-400 mt-1 tabular font-medium">
+                {formatMoney(final - initial)}
+              </div>
+              <div className="text-[9px] text-ink-400 mt-0.5">absorbed</div>
+            </div>
+            <PayoutReadingCard
+              label="Settled read"
+              subtitle="recoup inside cap"
+              amount={final}
+              tone="brand"
+              sourceEntryId="entry_marcus_resolution"
+              sourceLabel="from resolution entry"
+              onJump={onJump}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Section 2: Deal changes since signing */}
+      {diff.length > 0 && (
+        <div className="px-5 py-4">
+          <div className="flex items-center justify-between mb-2.5 gap-3 flex-wrap">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-700">
+              Deal changes since signing
+            </div>
+            <div className="text-[11px] text-ink-400">
+              {diff.length} change{diff.length === 1 ? "" : "s"} · projection
+              of{" "}
+              <code className="font-mono text-ink-600 bg-canvas-soft px-1 rounded">
+                field_change
+              </code>{" "}
+              +{" "}
+              <code className="font-mono text-ink-600 bg-canvas-soft px-1 rounded">
+                companion_flag
+              </code>
+            </div>
+          </div>
+          <div className="rounded-lg ring-1 ring-ink-200/70 overflow-hidden">
+            {diff.map((d, i) => {
+              const target = d.sourceEntryIds[0];
+              return (
+                <button
+                  key={i}
+                  onClick={() => target && onJump(target)}
+                  className={`w-full text-left px-4 py-3 grid grid-cols-[160px_1fr_auto] items-center gap-4 text-[12.5px] transition-colors hover:bg-canvas-soft ${i > 0 ? "border-t border-ink-100" : ""}`}
+                >
+                  <div className="text-ink-700 font-medium">
+                    {d.field}
+                    {d.warning && (
+                      <div className="text-[10.5px] text-amber-700 font-normal mt-0.5">
+                        ⚠ {d.warning}
+                      </div>
+                    )}
+                  </div>
+                  <div className="font-mono tabular text-[12px]">
+                    {d.before !== "—" && (
+                      <span className="text-rose-700 line-through opacity-75">
+                        {d.before}
+                      </span>
+                    )}
+                    {d.before !== "—" && (
+                      <span className="mx-2 text-ink-300">→</span>
+                    )}
+                    <span
+                      className={`font-semibold ${d.warning ? "text-amber-700" : "text-brand-700"}`}
+                    >
+                      {d.after}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-ink-400 inline-flex items-center gap-1 border-b border-dashed border-ink-300 whitespace-nowrap">
+                    {d.source} <ArrowRight className="h-2.5 w-2.5" />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function ReadingCard({
+function PayoutReadingCard({
   label,
   subtitle,
   amount,
@@ -587,7 +690,7 @@ function ReadingCard({
   return (
     <button
       onClick={() => onJump(sourceEntryId)}
-      className={`text-left rounded-lg p-4 ring-1 transition-all hover:shadow-sm ${
+      className={`text-left rounded-lg p-3.5 ring-1 transition-all hover:shadow-sm ${
         tone === "brand"
           ? "ring-brand-200/70 bg-brand-50/30 hover:ring-brand-400"
           : "ring-ink-200/70 bg-canvas-soft hover:ring-ink-400"
@@ -596,9 +699,9 @@ function ReadingCard({
       <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-500">
         {label}
       </div>
-      <div className="text-[11px] text-ink-400 mt-0.5">{subtitle}</div>
+      <div className="text-[10.5px] text-ink-400 mt-0.5">{subtitle}</div>
       <div
-        className={`mt-2 text-[22px] font-semibold tabular leading-none ${
+        className={`mt-1.5 text-[22px] font-semibold tabular leading-none ${
           tone === "brand" ? "text-brand-700" : "text-ink-900"
         }`}
       >
@@ -608,77 +711,6 @@ function ReadingCard({
         <ArrowRight className="h-2.5 w-2.5" /> {sourceLabel}
       </div>
     </button>
-  );
-}
-
-// ─── Pre-show diff ────────────────────────────────────────────────────────
-
-function DealDiffStrip({
-  diff,
-  onJump,
-}: {
-  diff: {
-    field: string;
-    before: string;
-    after: string;
-    source: string;
-    sourceEntryIds: string[];
-    warning?: string;
-  }[];
-  onJump: (entryId: string) => void;
-}) {
-  return (
-    <div className="my-6 rounded-xl bg-white ring-1 ring-ink-200/80 overflow-hidden">
-      <div className="px-5 py-3 border-b border-ink-200/60 flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <div className="text-[13px] font-semibold text-ink-900">
-            What changed since the deal was signed
-          </div>
-          <div className="text-[11px] text-ink-400 mt-0.5">
-            Projection of ledger entries with{" "}
-            <code className="font-mono bg-canvas-soft px-1 rounded">
-              field_change
-            </code>{" "}
-            or open Companion flags. Click a row to jump to its source entry.
-          </div>
-        </div>
-        <PlainBadge>
-          {diff.length} change{diff.length === 1 ? "" : "s"}
-        </PlainBadge>
-      </div>
-      <div>
-        {diff.map((d, i) => {
-          const target = d.sourceEntryIds[0];
-          return (
-            <button
-              key={i}
-              onClick={() => target && onJump(target)}
-              className={`w-full text-left px-5 py-3 grid grid-cols-[160px_1fr_auto] items-center gap-4 text-[12.5px] transition-colors hover:bg-canvas-soft ${i > 0 ? "border-t border-ink-100" : ""}`}
-            >
-              <div className="text-ink-500 font-medium">{d.field}</div>
-              <div className="font-mono tabular text-[12px]">
-                {d.before !== "—" && (
-                  <span className="text-rose-700 line-through opacity-75">
-                    {d.before}
-                  </span>
-                )}
-                {d.before !== "—" && (
-                  <span className="mx-2 text-ink-300">→</span>
-                )}
-                <span
-                  className={`font-semibold ${d.warning ? "text-amber-700" : "text-brand-700"}`}
-                >
-                  {d.after}
-                </span>
-              </div>
-              <div className="text-[11px] text-ink-400 inline-flex items-center gap-1 border-b border-dashed border-ink-300">
-                {d.source} <ArrowRight className="h-2.5 w-2.5" />
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
   );
 }
 
