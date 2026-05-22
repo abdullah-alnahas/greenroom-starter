@@ -10,6 +10,55 @@ This is the starter codebase for the Greenroom Applied AI PM case study.
 
 ---
 
+## `feat/audit-trail-prototype` — what's on this branch
+
+This branch contains my Applied AI PM case-study slice: **the append-only audit trail**, the surface I picked as the highest-leverage piece of settlement to ship first. The original starter is still here; nothing was removed. New routes and a new data layer were added on top.
+
+### TL;DR
+
+Settlement breaks at the **record**, not the math. So I built the record first — an append-only ledger, an AI summary that reads on top of it, and a smart companion that flags ambiguity at deal time. The full memo defending the cut lives at [`/home/abdullah/Documents/hdd/clipboardworks-pm-interview/Greenroom_Settlement_Memo.docx`](../Greenroom_Settlement_Memo.docx).
+
+### Watch the walkthrough
+
+[`docs/audit-trail/walkthrough.mp4`](docs/audit-trail/walkthrough.mp4) — ~4:25 narrated demo (Brian / ElevenLabs `eleven_v3`, 1.15× pacing, no transcript captions — let the visuals do the work).
+
+### What changed on this branch
+
+- **New route** `app/shows/[id]/trail` — the audit-trail page. Hero with derived stats, Smart Companion alert at the top, AI summary with clickable spans, structured AI summary card (payout interpretations + deal-change projection), append-only ledger below.
+- **Show page reconciled** `app/shows/[id]/page.tsx` — status, payout, hospitality cap, marketing recoup now all derive from the trail. No two parallel realities. Banner links to the trail.
+- **New route** `app/context/audit-trail` — the **coverage map**: 18 transcript quotes from the four Anil-interviewed people, each linked to the live surface that handles it. Four cases listed by name as out of scope.
+- **New data model** `data/audit-trail.ts` — `AuditEntry`, `AuditTrail`, `CompanionFlag`, `DealDiff`, `deriveShowView()`, `EVIDENCE_BY_ENTRY`, `TRANSCRIPT_COVERAGE`, plus the Coastal Spell trail (15 entries lifted from `data/dispute-thread.md` and the transcripts).
+- **Log-entry flow** that respects 2 a.m. logging — free text required, everything else (actor, kind, evidence, visibility, back-date) defaults smart and gets out of the way.
+- **Evidence drawer** — every chip on the timeline opens the actual artifact (real emails from `data/dispute-thread.md`), not a placeholder.
+
+### Screenshots
+
+| | |
+|---|---|
+| **Show page** (reconciled with trail) | **Trail page** (hero + derived stats) |
+| ![Show page](docs/audit-trail/screenshots/01-show-page.png) | ![Trail hero](docs/audit-trail/screenshots/02-trail-hero.png) |
+| **Smart Companion** (pattern flag) | **AI summary** (every figure traceable) |
+| ![Companion](docs/audit-trail/screenshots/03-companion-flag.png) | ![AI summary](docs/audit-trail/screenshots/04-ai-summary.png) |
+| **Structured AI summary** (ledger projection) | **Append-only ledger** (15 entries) |
+| ![Structured](docs/audit-trail/screenshots/05-structured-ai.png) | ![Timeline](docs/audit-trail/screenshots/06-timeline.png) |
+| **Log a new entry** (free text required, rest optional) | **Evidence drawer** (real dispute-thread emails) |
+| ![Log entry](docs/audit-trail/screenshots/07-log-entry-modal.png) | ![Evidence](docs/audit-trail/screenshots/08-evidence-drawer.png) |
+| **Coverage map** (`/context/audit-trail`) | |
+| ![Coverage](docs/audit-trail/screenshots/09-coverage-map.png) | |
+
+### Where to look first
+
+1. Open `/shows/show_coastal_spell_dispute` — see the show-page reconciliation.
+2. Click into `/shows/show_coastal_spell_dispute/trail` — the worked example. Try the Smart Companion's "Why this flag?" button, click any number in the AI summary, expand an entry, open an evidence chip.
+3. Hit `⌘N` or click the floating **Log entry** button — the actual logging UI.
+4. Open `/context/audit-trail` — the coverage map. Every transcript quote points at the feature that handles it.
+
+### What I deliberately cut
+
+Calculator, 2 a.m. walkthrough, real-time prediction, post-show agent comms, dispute arbitration. All five matter. The trail is the foundation the next two stand on, and it's the only surface that touches trust directly. Shipping it well buys the right to ship the rest — shipping the whole thing half-built buys nothing.
+
+---
+
 You're looking at a working but mediocre product. It's enough to feel real, but every workflow has gaps. **Your job isn't to fix everything — it's to pick a slice and design it well.** See your case study brief for full instructions.
 
 ## Before you start
