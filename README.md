@@ -20,7 +20,7 @@ Settlement breaks at the **record**, not the math. So I built the record first �
 
 ### Watch the walkthrough
 
-[`docs/audit-trail/walkthrough.mp4`](docs/audit-trail/walkthrough.mp4) — ~4:25 narrated demo (Brian / ElevenLabs `eleven_v3`, 1.15× pacing, no transcript captions — let the visuals do the work).
+[`docs/audit-trail/walkthrough.mp4`](docs/audit-trail/walkthrough.mp4) — ~4:25 narrated demo.
 
 ### What changed on this branch
 
