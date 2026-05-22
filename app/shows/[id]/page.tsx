@@ -6,8 +6,12 @@ import {
   AlertCircle,
   Clock,
   TrendingUp,
+  History,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react";
 import { getShowById } from "@/lib/queries";
+import { getTrailForShow, deriveShowView } from "@/data/audit-trail";
 import {
   Card,
   CardContent,
@@ -75,7 +79,31 @@ export default async function ShowDetailPage({
 
   const bonuses = deal ? parseBonuses(deal) : [];
 
-  const isDisputed = settlement?.status === "disputed";
+  // ── Trail-aware reconciliation ──
+  // When an audit trail exists, override DB state with the post-trail truth.
+  // Avoids the two-realities problem: this page must reflect the same outcome
+  // the trail records.
+  const trail = getTrailForShow(id);
+  const derived = trail ? deriveShowView(trail) : null;
+
+  // Coerce derived "settled" / "paid" to the existing StatusBadge enum.
+  // When trail exists and dispute resolved → show as "settled".
+  const displayStatus: typeof show.status = derived
+    ? "settled"
+    : show.status;
+  const displayPayout = derived?.finalPayout ?? settlement?.totalToArtist ?? null;
+  const displayHospitalityCap =
+    derived?.effectiveDealOverrides.hospitality_cap != null
+      ? Number(derived.effectiveDealOverrides.hospitality_cap)
+      : (deal?.hospitalityCap ?? null);
+  const displayMarketingRecoup =
+    derived?.effectiveDealOverrides.marketing_recoup != null
+      ? Number(derived.effectiveDealOverrides.marketing_recoup)
+      : null;
+
+  const isDisputed = derived?.resolvedDispute
+    ? false // resolved → not currently disputed
+    : settlement?.status === "disputed";
 
   return (
     <div className="max-w-7xl">
@@ -91,10 +119,24 @@ export default async function ShowDetailPage({
         <div className="flex items-start justify-between gap-6">
           <div>
             <div className="flex items-center gap-1.5 mb-4">
-              <StatusBadge status={show.status} />
+              <StatusBadge status={displayStatus} />
               {deal && <DealTypeBadge type={deal.dealType} />}
+              {derived?.resolvedDispute && (
+                <PlainBadge variant="rose">Dispute resolved</PlainBadge>
+              )}
               {isDisputed && (
                 <PlainBadge variant="rose">Disputed</PlainBadge>
+              )}
+              {derived && derived.openFlags > 0 && (
+                <PlainBadge variant="amber">
+                  {derived.openFlags} open flag{derived.openFlags === 1 ? "" : "s"}
+                </PlainBadge>
+              )}
+              {derived && derived.amendments.length > 0 && (
+                <PlainBadge variant="sky">
+                  {derived.amendments.length} amendment
+                  {derived.amendments.length === 1 ? "" : "s"}
+                </PlainBadge>
               )}
               {bonuses.length > 0 && (
                 <PlainBadge variant="brand">
@@ -119,12 +161,20 @@ export default async function ShowDetailPage({
               </span>
             </div>
           </div>
-          <Link href={`/shows/${show.id}/settle`} className="mt-6 shrink-0">
-            <Button variant="brand" size="lg">
-              <FileSpreadsheet className="h-4 w-4" />
-              {settlement ? "View settlement" : "Settle show"}
-            </Button>
-          </Link>
+          <div className="mt-6 shrink-0 flex items-center gap-2">
+            <Link href={`/shows/${show.id}/trail`}>
+              <Button variant="secondary" size="lg">
+                <Clock className="h-4 w-4" />
+                Audit trail
+              </Button>
+            </Link>
+            <Link href={`/shows/${show.id}/settle`}>
+              <Button variant="brand" size="lg">
+                <FileSpreadsheet className="h-4 w-4" />
+                {settlement ? "View settlement" : "Settle show"}
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Key numbers strip */}
@@ -132,13 +182,65 @@ export default async function ShowDetailPage({
           <MiniStat label="Gross" value={formatMoneyCompact(grossSoFar)} />
           <MiniStat label="Tickets" value={String(totalTickets)} />
           <MiniStat label="Expenses" value={formatMoneyCompact(totalExpenses)} />
-          {settlement?.totalToArtist != null && (
-            <MiniStat label="To artist" value={formatMoneyCompact(settlement.totalToArtist)} accent />
+          {displayPayout != null && (
+            <MiniStat
+              label={
+                derived?.resolvedDispute ? "To artist (final)" : "To artist"
+              }
+              value={formatMoneyCompact(displayPayout)}
+              accent
+            />
           )}
+          {derived?.absorbedDelta && derived.absorbedDelta !== 0 ? (
+            <MiniStat
+              label="Absorbed"
+              value={formatMoneyCompact(Math.abs(derived.absorbedDelta))}
+              tone="rose"
+            />
+          ) : null}
         </div>
       </div>
 
       <div className="px-12 pb-12">
+        {/* Trail summary banner — primary surface when trail exists */}
+        {trail && derived && (
+          <Link
+            href={`/shows/${show.id}/trail`}
+            className="group block mb-6 mt-1 rounded-lg ring-1 ring-brand-200/60 bg-gradient-to-r from-brand-50/40 to-canvas-soft px-5 py-4 hover:ring-brand-300 transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <div className="h-9 w-9 rounded-full bg-brand-700/10 flex items-center justify-center shrink-0">
+                <History className="h-4 w-4 text-brand-700" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="eyebrow text-[10px] text-brand-800">
+                    Audit trail
+                  </span>
+                  {derived.openFlags > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700">
+                      <Sparkles className="h-2.5 w-2.5" />
+                      {derived.openFlags} Companion flag
+                      {derived.openFlags === 1 ? "" : "s"} open
+                    </span>
+                  )}
+                </div>
+                <div className="text-[13.5px] text-ink-800 mt-0.5 leading-relaxed">
+                  {derived.trailSummary}.{" "}
+                  {derived.resolvedDispute && (
+                    <span className="text-ink-500">
+                      Final payout reflects post-dispute settlement on Andrea’s
+                      read; venue absorbed{" "}
+                      {formatMoneyCompact(Math.abs(derived.absorbedDelta))}.
+                    </span>
+                  )}
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-brand-700 group-hover:translate-x-0.5 transition-transform shrink-0" />
+            </div>
+          </Link>
+        )}
+
         {show.internalNotes && (
           <div className="mb-8 mt-1 rounded-lg bg-amber-50/50 ring-1 ring-amber-200/60 p-5 flex gap-3">
             <AlertCircle className="h-4 w-4 text-amber-700 mt-0.5 shrink-0" />
@@ -201,12 +303,37 @@ export default async function ShowDetailPage({
                       label="Hospitality cap"
                       mono
                       value={
-                        deal.hospitalityCap != null
-                          ? formatMoney(deal.hospitalityCap)
-                          : "—"
+                        displayHospitalityCap != null ? (
+                          <span className="inline-flex items-baseline gap-1.5">
+                            {formatMoney(displayHospitalityCap)}
+                            {derived?.effectiveDealOverrides.hospitality_cap !=
+                              null &&
+                              deal.hospitalityCap !=
+                                Number(
+                                  derived.effectiveDealOverrides
+                                    .hospitality_cap,
+                                ) && (
+                                <span className="text-[9px] font-semibold uppercase tracking-wide text-sky-700 px-1 py-px rounded ring-1 ring-sky-200/70 bg-sky-50">
+                                  amended
+                                </span>
+                              )}
+                          </span>
+                        ) : (
+                          "—"
+                        )
                       }
                     />
                   </div>
+                  {displayMarketingRecoup != null && (
+                    <div className="rounded-lg ring-1 ring-sky-200/50 bg-sky-50/30 p-3 text-[12.5px] text-ink-800 leading-relaxed">
+                      <span className="font-medium text-sky-800">
+                        Marketing recoup:
+                      </span>{" "}
+                      {formatMoney(displayMarketingRecoup)} added via
+                      mid-cycle amendment (verbal, then confirmed). Recorded
+                      in the audit trail, not in the deal record.
+                    </div>
+                  )}
 
                   {bonuses.length > 0 && (
                     <div className="rounded-lg ring-1 ring-brand-200/50 bg-brand-50/20 p-4">
@@ -462,15 +589,25 @@ function MiniStat({
   label,
   value,
   accent = false,
+  tone,
 }: {
   label: string;
   value: string;
   accent?: boolean;
+  tone?: "rose";
 }) {
   return (
     <div>
       <div className="eyebrow text-[9px] text-ink-400">{label}</div>
-      <div className={`text-[18px] font-mono tabular font-semibold mt-0.5 leading-none ${accent ? "text-brand-700" : "text-ink-900"}`}>
+      <div
+        className={`text-[18px] font-mono tabular font-semibold mt-0.5 leading-none ${
+          tone === "rose"
+            ? "text-rose-700"
+            : accent
+              ? "text-brand-700"
+              : "text-ink-900"
+        }`}
+      >
         {value}
       </div>
     </div>
