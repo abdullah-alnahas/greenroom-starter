@@ -34,6 +34,9 @@ import {
   EvidenceContent,
   AiSummary,
   SummarySpan,
+  RosterMember,
+  EvidenceRef,
+  EntryKind,
 } from "@/data/audit-trail";
 import type { Deal } from "@/db/schema";
 
@@ -309,6 +312,7 @@ export function TrailClient({ trail, deal, finalPayout, initialPayout }: Props) 
       )}
       {showFabModal && (
         <LogEntryModal
+          roster={trail.roster}
           onClose={() => setShowFabModal(false)}
           onSave={(entry) => {
             setAddedEntries((arr) => [...arr, entry]);
@@ -1138,77 +1142,314 @@ function EvidenceModal({
 
 // ─── Log entry modal ──────────────────────────────────────────────────────
 
+// Maps the entry kinds Mariana might log to display labels + the resulting
+// EntryKind written into audit_log. Excludes Companion-only kinds.
+const LOGGABLE_KINDS: { value: EntryKind; label: string; hint: string }[] = [
+  { value: "private_note", label: "Note (private)", hint: "Just for you" },
+  {
+    value: "deal_amendment",
+    label: "Amendment",
+    hint: "A deal field changed",
+  },
+  {
+    value: "dispute_message",
+    label: "Message",
+    hint: "Email, call, or in-room exchange",
+  },
+  {
+    value: "absorbed_decision",
+    label: "Absorbed cost",
+    hint: "Venue eats an overage",
+  },
+  {
+    value: "at_table_signoff",
+    label: "Signoff",
+    hint: "TM signed at the table",
+  },
+  {
+    value: "gm_approval",
+    label: "GM approval",
+    hint: "Marcus said ok",
+  },
+  {
+    value: "agent_dispute_opened",
+    label: "Agent dispute",
+    hint: "Agent opened a dispute",
+  },
+];
+
+const EVIDENCE_KINDS: {
+  value: EvidenceRef["kind"];
+  label: string;
+  placeholder: string;
+}[] = [
+  { value: "email", label: "Email", placeholder: "Subject + paste body or summary" },
+  { value: "text", label: "Text", placeholder: "Paste the text or summarize it" },
+  { value: "verbal", label: "Verbal", placeholder: "e.g. phone call w/ Andrea, 11:40am" },
+  { value: "receipt", label: "Receipt", placeholder: "Receipt description + amount" },
+  { value: "doc", label: "Doc", placeholder: "Document description or link" },
+];
+
 function LogEntryModal({
+  roster,
   onClose,
   onSave,
 }: {
+  roster: RosterMember[];
   onClose: () => void;
   onSave: (entry: AuditEntry) => void;
 }) {
+  const me = roster.find((r) => r.actorKind === "booker") ?? roster[0];
   const [text, setText] = useState("");
-  const [visibility, setVisibility] = useState<AuditEntry["visibility"]>(
-    "private",
+  const [actorId, setActorId] = useState<string>(me.id);
+  const [otherActorName, setOtherActorName] = useState("");
+  const [kind, setKind] = useState<EntryKind>("private_note");
+  const [visibility, setVisibility] = useState<AuditEntry["visibility"]>("private");
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [evidenceKind, setEvidenceKind] = useState<EvidenceRef["kind"]>("email");
+  const [evidenceBody, setEvidenceBody] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [occurredAtLocal, setOccurredAtLocal] = useState<string>(
+    toLocalDateTimeInputValue(new Date()),
   );
   const ref = useRef<HTMLTextAreaElement>(null);
-  const canSave = text.trim().length > 0;
+
+  const isOther = actorId === "__other__";
+  const actor = roster.find((r) => r.id === actorId);
+  const canSave =
+    text.trim().length > 0 && (!isOther || otherActorName.trim().length > 0);
 
   useEffect(() => {
     ref.current?.focus();
   }, []);
 
+  // Smart default for visibility based on actor kind
+  useEffect(() => {
+    if (kind === "private_note") setVisibility("private");
+    else if (actor?.actorKind === "agent") setVisibility("shared_agent");
+    else if (actor?.actorKind === "tm") setVisibility("shared_tm");
+    else if (actor?.actorKind === "gm") setVisibility("internal");
+    // Leave alone otherwise
+  }, [actor?.actorKind, kind]);
+
   const submit = () => {
     if (!canSave) return;
+    const actorName = isOther
+      ? otherActorName.trim()
+      : actor?.name ?? "Unknown";
+    const actorRole = isOther
+      ? "external"
+      : actor?.role ?? "—";
+    const actorKind = isOther ? "external" : actor?.actorKind ?? "external";
+
+    const evidence: EvidenceRef[] | undefined =
+      evidenceOpen && evidenceBody.trim().length > 0
+        ? [
+            {
+              kind: evidenceKind,
+              label: makeEvidenceLabel(evidenceKind, evidenceBody),
+            },
+          ]
+        : undefined;
+
     onSave({
       id: `entry_user_${Date.now()}`,
-      occurredAt: new Date().toISOString(),
-      actorName: "Mariana Reyes",
-      actorRole: `booker · ${visibility === "private" ? "private note" : "logged"}`,
-      actorKind: "booker",
-      kind: visibility === "private" ? "private_note" : "dispute_message",
+      occurredAt: new Date(occurredAtLocal).toISOString(),
+      actorName,
+      actorRole,
+      actorKind,
+      kind,
       summary: text.trim(),
       visibility,
+      ...(evidence ? { evidence } : {}),
     });
   };
 
   return (
-    <ModalShell onClose={onClose}>
+    <ModalShell onClose={onClose} maxWidth="max-w-xl">
       <ModalHeader title="Log a trail entry" onClose={onClose} />
-      <div className="px-6 py-5">
-        <label className="block text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-500 mb-1.5">
-          What happened?
-        </label>
-        <textarea
-          ref={ref}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit();
-          }}
-          placeholder="e.g. Andrea agreed by phone to push set time 15 min later. No email yet."
-          rows={4}
-          className="w-full rounded-lg ring-1 ring-ink-200 px-3 py-2.5 text-[13px] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-700 resize-none"
-        />
-        <label className="block text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-500 mt-4 mb-1.5">
-          Visibility
-        </label>
-        <div className="flex gap-2 flex-wrap">
-          {(["private", "internal", "shared_tm", "shared_agent"] as const).map(
-            (v) => (
+      <div className="px-6 py-5 space-y-5">
+        {/* What happened */}
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-500 mb-1.5">
+            What happened?
+          </label>
+          <textarea
+            ref={ref}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit();
+            }}
+            placeholder="e.g. Andrea agreed by phone to push set time 15 min later. No email yet."
+            rows={3}
+            className="w-full rounded-lg ring-1 ring-ink-200 px-3 py-2.5 text-[13px] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-700 resize-none"
+          />
+        </div>
+
+        {/* Person */}
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-500 mb-1.5">
+            Who acted or spoke?
+            <span className="ml-2 text-ink-400 font-normal normal-case tracking-normal text-[11px]">
+              defaults to you
+            </span>
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {roster.map((r) => (
+              <PersonChip
+                key={r.id}
+                member={r}
+                selected={actorId === r.id}
+                onSelect={() => setActorId(r.id)}
+              />
+            ))}
+            <button
+              onClick={() => setActorId("__other__")}
+              className={`px-3 py-1.5 rounded-full text-[11.5px] ring-1 ring-inset transition-colors ${
+                isOther
+                  ? "bg-ink-900 text-white ring-ink-900"
+                  : "bg-white text-ink-700 ring-ink-200 hover:ring-ink-400"
+              }`}
+            >
+              + other
+            </button>
+          </div>
+          {isOther && (
+            <input
+              value={otherActorName}
+              onChange={(e) => setOtherActorName(e.target.value)}
+              placeholder="Name (e.g. Production manager, sponsor rep)"
+              className="mt-2 w-full rounded-lg ring-1 ring-ink-200 px-3 py-2 text-[13px] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-700"
+            />
+          )}
+        </div>
+
+        {/* Kind */}
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-500 mb-1.5">
+            Entry type
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {LOGGABLE_KINDS.map((k) => (
+              <button
+                key={k.value}
+                onClick={() => setKind(k.value)}
+                title={k.hint}
+                className={`px-3 py-1.5 rounded-full text-[11.5px] ring-1 ring-inset transition-colors ${
+                  kind === k.value
+                    ? "bg-ink-900 text-white ring-ink-900"
+                    : "bg-white text-ink-700 ring-ink-200 hover:ring-ink-400"
+                }`}
+              >
+                {k.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Evidence — collapsed by default */}
+        <div>
+          <button
+            onClick={() => setEvidenceOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 text-[12px] text-ink-600 hover:text-ink-900"
+          >
+            <ChevronDown
+              className={`h-3 w-3 transition-transform ${evidenceOpen ? "rotate-180" : "-rotate-90"}`}
+            />
+            {evidenceOpen ? "Attach evidence" : "+ Attach evidence (optional)"}
+          </button>
+          {evidenceOpen && (
+            <div className="mt-2 rounded-lg ring-1 ring-ink-200/70 bg-canvas-soft p-3 space-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {EVIDENCE_KINDS.map((e) => (
+                  <button
+                    key={e.value}
+                    onClick={() => setEvidenceKind(e.value)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] ring-1 ring-inset transition-colors ${
+                      evidenceKind === e.value
+                        ? "bg-brand-700 text-white ring-brand-700"
+                        : "bg-white text-ink-700 ring-ink-200 hover:ring-ink-400"
+                    }`}
+                  >
+                    {e.label}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={evidenceBody}
+                onChange={(e) => setEvidenceBody(e.target.value)}
+                placeholder={
+                  EVIDENCE_KINDS.find((e) => e.value === evidenceKind)
+                    ?.placeholder
+                }
+                rows={3}
+                className="w-full rounded-lg ring-1 ring-ink-200 px-3 py-2 text-[12.5px] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-700 resize-none bg-white"
+              />
+              <p className="text-[10.5px] text-ink-400 leading-relaxed">
+                Real implementation would also accept file uploads (PDF
+                receipt, email .eml, screenshot). Prototype captures text
+                only.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Visibility */}
+        <div>
+          <label className="block text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-500 mb-1.5">
+            Visibility
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              ["private", "internal", "shared_tm", "shared_agent"] as const
+            ).map((v) => (
               <button
                 key={v}
                 onClick={() => setVisibility(v)}
-                className={`px-3 py-1.5 rounded-full text-[11.5px] ring-1 ring-inset ${
+                className={`px-3 py-1.5 rounded-full text-[11.5px] ring-1 ring-inset transition-colors ${
                   visibility === v
                     ? "bg-ink-900 text-white ring-ink-900"
-                    : "bg-white text-ink-700 ring-ink-200 hover:ring-ink-300"
+                    : "bg-white text-ink-700 ring-ink-200 hover:ring-ink-400"
                 }`}
               >
                 {v.replace("_", " ")}
               </button>
-            ),
+            ))}
+          </div>
+        </div>
+
+        {/* Advanced — when */}
+        <div>
+          <button
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="inline-flex items-center gap-1.5 text-[12px] text-ink-600 hover:text-ink-900"
+          >
+            <ChevronDown
+              className={`h-3 w-3 transition-transform ${showAdvanced ? "rotate-180" : "-rotate-90"}`}
+            />
+            {showAdvanced ? "Hide advanced" : "+ Advanced (back-date)"}
+          </button>
+          {showAdvanced && (
+            <div className="mt-2 rounded-lg ring-1 ring-ink-200/70 bg-canvas-soft p-3">
+              <label className="block text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-500 mb-1.5">
+                When did this happen?
+              </label>
+              <input
+                type="datetime-local"
+                value={occurredAtLocal}
+                onChange={(e) => setOccurredAtLocal(e.target.value)}
+                className="rounded-lg ring-1 ring-ink-200 px-3 py-1.5 text-[12.5px] text-ink-900 bg-white focus:outline-none focus:ring-2 focus:ring-brand-700"
+              />
+              <p className="text-[10.5px] text-ink-400 mt-2 leading-relaxed">
+                Defaults to now. Back-date when logging something you forgot
+                to record in the moment.
+              </p>
+            </div>
           )}
         </div>
-        <p className="text-[11px] text-ink-400 mt-4 leading-relaxed">
+
+        <p className="text-[11px] text-ink-400 leading-relaxed">
           Saves to the current session — prototype does not persist entries
           across reloads. <kbd className="font-mono bg-canvas-soft px-1 rounded">⌘↵</kbd> to save.
         </p>
@@ -1223,6 +1464,60 @@ function LogEntryModal({
       </div>
     </ModalShell>
   );
+}
+
+function PersonChip({
+  member,
+  selected,
+  onSelect,
+}: {
+  member: RosterMember;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const initials = member.name
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("");
+  return (
+    <button
+      onClick={onSelect}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] ring-1 ring-inset transition-colors ${
+        selected
+          ? "bg-ink-900 text-white ring-ink-900"
+          : "bg-white text-ink-700 ring-ink-200 hover:ring-ink-400"
+      }`}
+    >
+      <span
+        className={`h-4 w-4 rounded-full flex items-center justify-center text-[8.5px] font-semibold ${
+          selected ? "bg-white/20 text-white" : actorAvatar(member.actorKind)
+        }`}
+      >
+        {initials}
+      </span>
+      {member.name.split(" ")[0]}
+      <span className={`text-[10px] ${selected ? "text-white/70" : "text-ink-400"}`}>
+        {member.role.split("·")[0].trim()}
+      </span>
+    </button>
+  );
+}
+
+function toLocalDateTimeInputValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function makeEvidenceLabel(kind: EvidenceRef["kind"], body: string): string {
+  const trimmed = body.trim();
+  const head = trimmed.split("\n")[0].slice(0, 64);
+  const ellipsis = trimmed.length > 64 || trimmed.includes("\n") ? "…" : "";
+  if (kind === "email") return `Email · ${head}${ellipsis}`;
+  if (kind === "text") return `Text · ${head}${ellipsis}`;
+  if (kind === "verbal") return `Verbal · ${head}${ellipsis}`;
+  if (kind === "receipt") return `Receipt · ${head}${ellipsis}`;
+  return `Doc · ${head}${ellipsis}`;
 }
 
 // ─── Share-with-TM modal ──────────────────────────────────────────────────

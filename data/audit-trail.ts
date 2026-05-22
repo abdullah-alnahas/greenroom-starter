@@ -147,8 +147,23 @@ export type AiSummary = {
   generatedAt: string;
 };
 
+/**
+ * People who routinely appear on this show's trail. Surfaced in the
+ * log-entry modal so Mariana can attribute an entry to whoever spoke or
+ * acted, without typing a name. In production this list would come from
+ * the show's agent, opener's agent, GM, and the tour manager attached to
+ * the deal — plus a free-text "other" option.
+ */
+export type RosterMember = {
+  id: string;
+  name: string;
+  role: string;
+  actorKind: ActorKind;
+};
+
 export type ShowTrail = {
   showId: string;
+  roster: RosterMember[];
   // Fallback only — UI reads deals.dealNotesFreetext from the database, which
   // is the prose Mariana actually trusts. This string is shown only when the
   // deal record has no notes (rare). Don't add new content here; edit the
@@ -173,6 +188,38 @@ export type ShowTrail = {
 
 const COASTAL_SPELL: ShowTrail = {
   showId: "show_coastal_spell_dispute",
+  roster: [
+    {
+      id: "user_mariana",
+      name: "Mariana Reyes",
+      role: "booker · you",
+      actorKind: "booker",
+    },
+    {
+      id: "agent_andrea_pelletier",
+      name: "Andrea Pelletier",
+      role: "agent · WME",
+      actorKind: "agent",
+    },
+    {
+      id: "agent_daniel_hwang",
+      name: "Daniel Hwang",
+      role: "agent · WME",
+      actorKind: "agent",
+    },
+    {
+      id: "tm_diego",
+      name: "Diego Velasquez",
+      role: "tour manager",
+      actorKind: "tm",
+    },
+    {
+      id: "gm_marcus",
+      name: "Marcus Holland",
+      role: "GM",
+      actorKind: "gm",
+    },
+  ],
   dealSummary:
     "$5,000 vs 80% of net after expenses, expenses capped $2,500, marketing recoup $900 against gross, hospitality cap $500.",
   aiSummary: {
@@ -489,6 +536,14 @@ const COASTAL_SPELL: ShowTrail = {
 const SAMPLE_LIGHT: Omit<ShowTrail, "showId">[] = [
   {
     dealSummary: "$3,000 flat guarantee. No expense pass-through.",
+    roster: [
+      {
+        id: "user_mariana",
+        name: "Mariana Reyes",
+        role: "booker · you",
+        actorKind: "booker",
+      },
+    ],
     affordances: { shareWithTm: true, sendToAgent: true },
     companionFlags: [],
     dealDiff: [],
