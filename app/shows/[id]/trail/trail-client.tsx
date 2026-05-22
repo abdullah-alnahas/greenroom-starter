@@ -32,6 +32,8 @@ import {
   AUDIT_LOG_ROW_EXAMPLE,
   EVIDENCE_BY_ENTRY,
   EvidenceContent,
+  AiSummary,
+  SummarySpan,
 } from "@/data/audit-trail";
 import type { Deal } from "@/db/schema";
 
@@ -55,6 +57,16 @@ export function TrailClient({ trail, deal, finalPayout, initialPayout }: Props) 
   const [addedEntries, setAddedEntries] = useState<AuditEntry[]>([]);
   const [showSchemaPanel, setShowSchemaPanel] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set());
+
+  const jumpToEntry = (entryId: string) => {
+    const el = document.getElementById(`entry-${entryId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setExpanded((prev) => new Set(prev).add(entryId));
+    setHighlightedIds(new Set([entryId]));
+    setTimeout(() => setHighlightedIds(new Set()), 1800);
+  };
 
   // Toast auto-dismiss
   useEffect(() => {
@@ -143,6 +155,17 @@ export function TrailClient({ trail, deal, finalPayout, initialPayout }: Props) 
         </div>
       )}
 
+      {/* AI summary — readable state view on top of the ledger. Per memo:
+          "strictly assistive — when summary and ledger disagree, the ledger
+          governs, and the product says so." */}
+      {trail.aiSummary && (
+        <AiSummaryCard
+          summary={trail.aiSummary}
+          ledgerSize={trail.entries.length}
+          onJump={jumpToEntry}
+        />
+      )}
+
       {/* Math strip for unsupported deal types */}
       {showsCalcGap && initialPayout != null && finalPayout != null && (
         <MathStrip
@@ -212,6 +235,7 @@ export function TrailClient({ trail, deal, finalPayout, initialPayout }: Props) 
             key={entry.id}
             entry={entry}
             expanded={expanded.has(entry.id)}
+            highlighted={highlightedIds.has(entry.id)}
             onToggle={() => toggleExpand(entry.id)}
             onOpenEvidence={(content) => setOpenEvidence(content)}
           />
@@ -405,6 +429,74 @@ function CompanionAlert({
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── AI summary ───────────────────────────────────────────────────────────
+
+function AiSummaryCard({
+  summary,
+  ledgerSize,
+  onJump,
+}: {
+  summary: AiSummary;
+  ledgerSize: number;
+  onJump: (entryId: string) => void;
+}) {
+  const uniqueSources = new Set<string>();
+  summary.parts.forEach((p) => {
+    if (typeof p !== "string") p.sources.forEach((s) => uniqueSources.add(s));
+  });
+
+  return (
+    <div className="my-6 rounded-xl ring-1 ring-brand-200/50 bg-gradient-to-b from-brand-50/40 to-white p-5">
+      <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-700 mb-3">
+        <Sparkles className="h-3 w-3" />
+        AI summary · current state
+      </div>
+      <p
+        className="font-display text-[16.5px] leading-[1.55] text-ink-800 m-0"
+        style={{ fontStyle: "italic", letterSpacing: "-0.005em" }}
+      >
+        {summary.parts.map((part, i) =>
+          typeof part === "string" ? (
+            <span key={i}>{part}</span>
+          ) : (
+            <SourceSpan key={i} span={part} onJump={onJump} />
+          ),
+        )}
+      </p>
+      <div className="mt-4 pt-3 border-t border-brand-200/50 flex items-center justify-between text-[11px] text-ink-500 flex-wrap gap-2">
+        <span>
+          Generated from {ledgerSize} ledger entries · {uniqueSources.size}{" "}
+          sources cited ·{" "}
+          <span className="text-ink-700 font-medium">
+            ledger governs when summary disagrees
+          </span>
+        </span>
+        <span className="text-ink-400 font-mono tabular text-[10px]">
+          {format(parseISO(summary.generatedAt), "MMM d, h:mm a")}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SourceSpan({
+  span,
+  onJump,
+}: {
+  span: SummarySpan;
+  onJump: (entryId: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => span.sources[0] && onJump(span.sources[0])}
+      className="font-medium text-ink-900 not-italic border-b border-dashed border-brand-300 hover:border-brand-700 hover:bg-brand-50/60 px-0.5 rounded-sm transition-colors cursor-pointer"
+      title={`Source: entry ${span.sources.join(", ")} — click to jump to ledger`}
+    >
+      {span.text}
+    </button>
   );
 }
 
@@ -615,11 +707,13 @@ function evidenceIcon(kind: string) {
 function EntryRow({
   entry,
   expanded,
+  highlighted,
   onToggle,
   onOpenEvidence,
 }: {
   entry: AuditEntry;
   expanded: boolean;
+  highlighted: boolean;
   onToggle: () => void;
   onOpenEvidence: (c: EvidenceContent) => void;
 }) {
@@ -636,15 +730,17 @@ function EntryRow({
     entry.body || entry.evidence?.length || entry.fieldChange;
 
   return (
-    <div className="relative pl-11 pb-4">
+    <div id={`entry-${entry.id}`} className="relative pl-11 pb-4 scroll-mt-32">
       <div
         className={`absolute left-2 top-4 h-3.5 w-3.5 rounded-full ${dot.bg} ${dot.ring}`}
       />
       <div
-        className={`rounded-xl bg-white ring-1 ring-ink-200/60 p-4 transition-all ${
-          expanded
-            ? "ring-brand-200/70 bg-gradient-to-b from-brand-50/15 to-white"
-            : "hover:ring-ink-300"
+        className={`rounded-xl bg-white ring-1 p-4 transition-all duration-500 ${
+          highlighted
+            ? "ring-2 ring-brand-500 bg-brand-50/40 shadow-lg shadow-brand-700/10"
+            : expanded
+              ? "ring-brand-200/70 bg-gradient-to-b from-brand-50/15 to-white"
+              : "ring-ink-200/60 hover:ring-ink-300"
         }`}
       >
         <div className="flex items-center gap-3 mb-1.5">

@@ -118,49 +118,36 @@ export default async function TrailPage({
               </span>
             </div>
 
-            <div className="mt-5 max-w-2xl rounded-lg ring-1 ring-ink-200/80 bg-canvas-soft px-4 py-3.5 text-[13px] text-ink-700 leading-relaxed">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-500 mb-1.5">
-                Deal · from Mariana&apos;s notes
-              </div>
-              <div className="italic text-ink-800">
-                {deal?.dealNotesFreetext ?? trail.dealSummary}
-              </div>
-              <div className="text-[11px] text-ink-400 mt-2">
-                Source:{" "}
-                <code className="font-mono bg-white px-1 rounded ring-1 ring-ink-200/60">
-                  deals.deal_notes_freetext
-                </code>{" "}
-                · the prose the booker actually trusts. Structured fields
-                (guarantee, percentage, caps) live on the show page.
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* Stat strip — 30s view per MK1 */}
+        {/* Stat strip — 30s view per MK1. Labels stay literal so a reviewer
+            never has to ask "span of what?" */}
         <div className="flex items-baseline gap-10 mt-8 pt-5 border-t border-ink-200/40">
           {finalPayout != null && (
             <MiniStat
-              label="Final payout"
+              label="Settled at"
               value={formatMoneyCompact(finalPayout)}
               accent
             />
           )}
           {absorbedDelta !== 0 && (
             <MiniStat
-              label={absorbedDelta > 0 ? "Adjusted up" : "Absorbed"}
+              label="Venue absorbed"
               value={formatMoneyCompact(Math.abs(absorbedDelta))}
               tone="rose"
             />
           )}
-          <MiniStat label="Entries" value={String(stats.total)} />
+          <MiniStat label="Ledger entries" value={String(stats.total)} />
+          {stats.amendments > 0 && (
+            <MiniStat
+              label="Term amendments"
+              value={String(stats.amendments)}
+            />
+          )}
           <MiniStat
-            label="Spans"
+            label="Deal → close"
             value={`${stats.spanDays} days`}
-          />
-          <MiniStat
-            label="Amendments"
-            value={String(stats.amendments)}
           />
         </div>
       </div>

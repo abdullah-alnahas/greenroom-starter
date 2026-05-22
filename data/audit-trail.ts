@@ -117,6 +117,24 @@ export type DealDiff = {
   warning?: string;
 };
 
+/**
+ * AI summary per the v3 memo:
+ *
+ *   "A readable state view on top of the ledger, every line expandable to
+ *    its source entry. Strictly assistive — when summary and ledger
+ *    disagree, the ledger governs, and the product says so."
+ *
+ * Represented as an ordered list of parts. A plain string is connective
+ * tissue. A SummarySpan is a load-bearing fact that points back at one or
+ * more ledger entries — click the span and the UI scrolls to / highlights
+ * that entry. Generated lazily in production; static here.
+ */
+export type SummarySpan = { text: string; sources: string[] };
+export type AiSummary = {
+  parts: (string | SummarySpan)[];
+  generatedAt: string;
+};
+
 export type ShowTrail = {
   showId: string;
   // Fallback only — UI reads deals.dealNotesFreetext from the database, which
@@ -124,6 +142,9 @@ export type ShowTrail = {
   // deal record has no notes (rare). Don't add new content here; edit the
   // seed in db/seed.ts under `dealNotesFreetext`.
   dealSummary: string;
+  // Optional — only set on trails rich enough to summarize. Light trails
+  // (one or two entries) skip this and let the ledger speak for itself.
+  aiSummary?: AiSummary;
   companionFlags: CompanionFlag[];
   dealDiff: DealDiff[];
   entries: AuditEntry[];
@@ -142,6 +163,41 @@ const COASTAL_SPELL: ShowTrail = {
   showId: "show_coastal_spell_dispute",
   dealSummary:
     "$5,000 vs 80% of net after expenses, expenses capped $2,500, marketing recoup $900 against gross, hospitality cap $500.",
+  aiSummary: {
+    generatedAt: "2025-03-19T09:30:00Z",
+    parts: [
+      "Coastal Spell played March 14, 2025. Deal is ",
+      { text: "$5,000 vs 80% of net", sources: ["entry_deal_email_origin"] },
+      " with expenses capped at $2,500. Two amendments since signing: hospitality cap moved ",
+      {
+        text: "$500 → $700",
+        sources: ["entry_hospitality_amendment"],
+      },
+      " on Mar 3, and a ",
+      {
+        text: "$900 marketing recoup",
+        sources: ["entry_recoup_verbal"],
+      },
+      " was added Mar 5 — verbal only, no written confirmation. Companion flagged the recoup language as ",
+      {
+        text: "ambiguous before show day",
+        sources: ["entry_companion_flag"],
+      },
+      ". Tour manager signed off at the table on the night at ",
+      { text: "$11,565", sources: ["entry_at_table_signoff"] },
+      ". The agent ",
+      {
+        text: "opened a dispute four days later",
+        sources: ["entry_dispute_opened"],
+      },
+      " over the recoup interpretation; resolved Mar 19 on the agent's read, with the ",
+      {
+        text: "venue absorbing $720",
+        sources: ["entry_marcus_resolution"],
+      },
+      ".",
+    ],
+  },
   affordances: { shareWithTm: true, sendToAgent: true },
 
   companionFlags: [
