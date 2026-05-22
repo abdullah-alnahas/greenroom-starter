@@ -16,7 +16,7 @@ This branch contains my Applied AI PM case-study slice: **the append-only audit 
 
 ### TL;DR
 
-Settlement breaks at the **record**, not the math. So I built the record first — an append-only ledger, an AI summary that reads on top of it, and a smart companion that flags ambiguity at deal time. The full memo defending the cut is at [`docs/audit-trail/Greenroom_Settlement_Memo.docx`](docs/audit-trail/Greenroom_Settlement_Memo.docx).
+Settlement breaks at the **record**, not the math. So I built the record first — an append-only ledger, an AI summary that reads on top of it, and a smart companion that flags ambiguity at deal time. The full memo defending the cut is at [`docs/audit-trail/Greenroom_Settlement_Memo.pdf`](docs/audit-trail/Greenroom_Settlement_Memo.pdf).
 
 ### Watch the walkthrough
 
