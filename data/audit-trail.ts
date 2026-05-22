@@ -119,6 +119,10 @@ export type DealDiff = {
 
 export type ShowTrail = {
   showId: string;
+  // Fallback only — UI reads deals.dealNotesFreetext from the database, which
+  // is the prose Mariana actually trusts. This string is shown only when the
+  // deal record has no notes (rare). Don't add new content here; edit the
+  // seed in db/seed.ts under `dealNotesFreetext`.
   dealSummary: string;
   companionFlags: CompanionFlag[];
   dealDiff: DealDiff[];

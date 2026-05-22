@@ -118,9 +118,21 @@ export default async function TrailPage({
               </span>
             </div>
 
-            <div className="mt-5 max-w-2xl rounded-lg ring-1 ring-ink-200/80 bg-canvas-soft px-4 py-3 text-[13px] text-ink-700 leading-relaxed">
-              <span className="font-medium text-ink-900">Deal:</span>{" "}
-              {trail.dealSummary}
+            <div className="mt-5 max-w-2xl rounded-lg ring-1 ring-ink-200/80 bg-canvas-soft px-4 py-3.5 text-[13px] text-ink-700 leading-relaxed">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-500 mb-1.5">
+                Deal · from Mariana&apos;s notes
+              </div>
+              <div className="italic text-ink-800">
+                {deal?.dealNotesFreetext ?? trail.dealSummary}
+              </div>
+              <div className="text-[11px] text-ink-400 mt-2">
+                Source:{" "}
+                <code className="font-mono bg-white px-1 rounded ring-1 ring-ink-200/60">
+                  deals.deal_notes_freetext
+                </code>{" "}
+                · the prose the booker actually trusts. Structured fields
+                (guarantee, percentage, caps) live on the show page.
+              </div>
             </div>
           </div>
         </div>
