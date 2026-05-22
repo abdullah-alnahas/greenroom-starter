@@ -100,7 +100,59 @@ export default function ContextPage() {
           </code>
           .
         </Step>
+        <Step n={6}>
+          From that show, open the{" "}
+          <Link
+            href="/shows/show_coastal_spell_dispute/trail"
+            className="text-brand-700 font-medium hover:text-brand-800 hover:underline"
+          >
+            audit trail
+          </Link>{" "}
+          — the prototype surface this case study builds. The companion page{" "}
+          <Link
+            href="/context/audit-trail"
+            className="text-brand-700 font-medium hover:text-brand-800 hover:underline"
+          >
+            /context/audit-trail
+          </Link>{" "}
+          maps every transcript pain point to the trail feature that solves it.
+        </Step>
       </ol>
+
+      {/* Audit trail prototype callout */}
+      <div className="mb-14 rounded-lg ring-1 ring-brand-200/60 bg-gradient-to-r from-brand-50/40 to-canvas-soft p-5 flex gap-4 items-start">
+        <div className="h-9 w-9 rounded-full bg-brand-700/10 flex items-center justify-center shrink-0">
+          <AlertCircle className="h-4 w-4 text-brand-700" />
+        </div>
+        <div className="flex-1">
+          <div className="eyebrow text-[10px] text-brand-800 mb-1">
+            Prototype slice
+          </div>
+          <h3 className="text-[15px] font-semibold text-ink-900 mb-1.5">
+            The audit-trail surface
+          </h3>
+          <p className="text-[12.5px] text-ink-700 leading-relaxed mb-3">
+            Built against 18 distinct cases lifted from the four transcripts.
+            Coastal Spell is the worked example. See the live trail or read the
+            full coverage map.
+          </p>
+          <div className="flex items-center gap-3 text-[12.5px] flex-wrap">
+            <Link
+              href="/shows/show_coastal_spell_dispute/trail"
+              className="text-brand-700 font-medium hover:text-brand-800 hover:underline inline-flex items-center gap-1"
+            >
+              Open the trail <ArrowRight className="h-3 w-3" />
+            </Link>
+            <span className="text-ink-300">·</span>
+            <Link
+              href="/context/audit-trail"
+              className="text-brand-700 font-medium hover:text-brand-800 hover:underline inline-flex items-center gap-1"
+            >
+              Read the coverage map <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        </div>
+      </div>
 
       {/* Materials */}
       <h2 className="font-display text-[24px] font-medium text-ink-900 mb-4" style={{ letterSpacing: "-0.02em" }}>
