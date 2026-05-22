@@ -166,17 +166,20 @@ export function TrailClient({ trail, deal, finalPayout, initialPayout }: Props) 
         />
       )}
 
-      {/* Math strip for unsupported deal types */}
+      {/* Math strip for unsupported deal types — ledger-projection */}
       {showsCalcGap && initialPayout != null && finalPayout != null && (
         <MathStrip
           dealType={deal!.dealType}
           initial={initialPayout}
           final={finalPayout}
+          onJump={jumpToEntry}
         />
       )}
 
-      {/* Pre-show diff */}
-      {trail.dealDiff.length > 0 && <DealDiffStrip diff={trail.dealDiff} />}
+      {/* Pre-show diff — ledger-projection */}
+      {trail.dealDiff.length > 0 && (
+        <DealDiffStrip diff={trail.dealDiff} onJump={jumpToEntry} />
+      )}
 
       {/* Section header + controls */}
       <div className="mt-10 mb-4 flex items-end justify-between flex-wrap gap-4">
@@ -454,10 +457,7 @@ function AiSummaryCard({
         <Sparkles className="h-3 w-3" />
         AI summary · current state
       </div>
-      <p
-        className="font-display text-[16.5px] leading-[1.55] text-ink-800 m-0"
-        style={{ fontStyle: "italic", letterSpacing: "-0.005em" }}
-      >
+      <p className="text-[14px] leading-[1.65] text-ink-800 m-0">
         {summary.parts.map((part, i) =>
           typeof part === "string" ? (
             <span key={i}>{part}</span>
@@ -492,7 +492,7 @@ function SourceSpan({
   return (
     <button
       onClick={() => span.sources[0] && onJump(span.sources[0])}
-      className="font-medium text-ink-900 not-italic border-b border-dashed border-brand-300 hover:border-brand-700 hover:bg-brand-50/60 px-0.5 rounded-sm transition-colors cursor-pointer"
+      className="font-medium text-ink-900 border-b border-dashed border-brand-400 hover:border-brand-700 hover:bg-brand-50/60 px-0.5 rounded-sm transition-colors cursor-pointer"
       title={`Source: entry ${span.sources.join(", ")} — click to jump to ledger`}
     >
       {span.text}
@@ -506,24 +506,28 @@ function MathStrip({
   dealType,
   initial,
   final,
+  onJump,
 }: {
   dealType: string;
   initial: number;
   final: number;
+  onJump: (entryId: string) => void;
 }) {
   return (
     <div className="my-6 rounded-xl bg-white ring-1 ring-ink-200/80 p-5">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-500">
-            Two readings of the math
+            Two readings of the math · ledger-derived
           </div>
-          <div className="text-[12px] text-ink-400 mt-1">
-            Greenroom calc doesn’t support{" "}
+          <div className="text-[12px] text-ink-400 mt-1 max-w-xl leading-relaxed">
+            Calc engine can’t compute{" "}
             <code className="font-mono text-ink-700 bg-canvas-soft px-1 rounded">
               {dealType}
             </code>{" "}
-            deals — these come from email math, not the engine.
+            deals, so both numbers below come from ledger entries — the
+            payouts recorded at signoff and at dispute resolution — not from
+            an in-app calculation.
           </div>
         </div>
       </div>
@@ -533,12 +537,18 @@ function MathStrip({
           subtitle="recoup off gross, then cap"
           amount={initial}
           tone="ink"
+          sourceEntryId="entry_at_table_signoff"
+          sourceLabel="from signoff entry"
+          onJump={onJump}
         />
         <ReadingCard
           label="Settled read"
           subtitle="recoup inside cap"
           amount={final}
           tone="brand"
+          sourceEntryId="entry_marcus_resolution"
+          sourceLabel="from resolution entry"
+          onJump={onJump}
         />
       </div>
       <div className="text-[11px] text-ink-400 mt-3 leading-relaxed">
@@ -546,8 +556,8 @@ function MathStrip({
         <span className="text-ink-700 font-medium tabular">
           {formatMoney(final - initial)}
         </span>{" "}
-        — venue absorbed the difference. See timeline below for the deal-email
-        language that produced both reads.
+        — venue absorbed the difference. The interpretations on each card
+        come from the dispute messages on the ledger.
       </div>
     </div>
   );
@@ -558,18 +568,25 @@ function ReadingCard({
   subtitle,
   amount,
   tone,
+  sourceEntryId,
+  sourceLabel,
+  onJump,
 }: {
   label: string;
   subtitle: string;
   amount: number;
   tone: "ink" | "brand";
+  sourceEntryId: string;
+  sourceLabel: string;
+  onJump: (entryId: string) => void;
 }) {
   return (
-    <div
-      className={`rounded-lg p-4 ring-1 ${
+    <button
+      onClick={() => onJump(sourceEntryId)}
+      className={`text-left rounded-lg p-4 ring-1 transition-all hover:shadow-sm ${
         tone === "brand"
-          ? "ring-brand-200/70 bg-brand-50/30"
-          : "ring-ink-200/70 bg-canvas-soft"
+          ? "ring-brand-200/70 bg-brand-50/30 hover:ring-brand-400"
+          : "ring-ink-200/70 bg-canvas-soft hover:ring-ink-400"
       }`}
     >
       <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-500">
@@ -583,7 +600,10 @@ function ReadingCard({
       >
         {formatMoney(amount)}
       </div>
-    </div>
+      <div className="mt-2 text-[10px] text-ink-400 inline-flex items-center gap-1 border-b border-dashed border-ink-300">
+        <ArrowRight className="h-2.5 w-2.5" /> {sourceLabel}
+      </div>
+    </button>
   );
 }
 
@@ -591,53 +611,68 @@ function ReadingCard({
 
 function DealDiffStrip({
   diff,
+  onJump,
 }: {
   diff: {
     field: string;
     before: string;
     after: string;
     source: string;
+    sourceEntryIds: string[];
     warning?: string;
   }[];
+  onJump: (entryId: string) => void;
 }) {
   return (
     <div className="my-6 rounded-xl bg-white ring-1 ring-ink-200/80 overflow-hidden">
-      <div className="px-5 py-3 border-b border-ink-200/60 flex items-center justify-between">
+      <div className="px-5 py-3 border-b border-ink-200/60 flex items-center justify-between gap-3 flex-wrap">
         <div>
           <div className="text-[13px] font-semibold text-ink-900">
             What changed since the deal was signed
           </div>
           <div className="text-[11px] text-ink-400 mt-0.5">
-            Booker should review before walking into settlement.
+            Projection of ledger entries with{" "}
+            <code className="font-mono bg-canvas-soft px-1 rounded">
+              field_change
+            </code>{" "}
+            or open Companion flags. Click a row to jump to its source entry.
           </div>
         </div>
         <PlainBadge>
-          {diff.length} amendment{diff.length === 1 ? "" : "s"}
+          {diff.length} change{diff.length === 1 ? "" : "s"}
         </PlainBadge>
       </div>
       <div>
-        {diff.map((d, i) => (
-          <div
-            key={i}
-            className={`px-5 py-3 grid grid-cols-[160px_1fr_auto] items-center gap-4 text-[12.5px] ${i > 0 ? "border-t border-ink-100" : ""}`}
-          >
-            <div className="text-ink-500 font-medium">{d.field}</div>
-            <div className="font-mono tabular text-[12px]">
-              {d.before !== "—" && (
-                <span className="text-rose-700 line-through opacity-75">
-                  {d.before}
+        {diff.map((d, i) => {
+          const target = d.sourceEntryIds[0];
+          return (
+            <button
+              key={i}
+              onClick={() => target && onJump(target)}
+              className={`w-full text-left px-5 py-3 grid grid-cols-[160px_1fr_auto] items-center gap-4 text-[12.5px] transition-colors hover:bg-canvas-soft ${i > 0 ? "border-t border-ink-100" : ""}`}
+            >
+              <div className="text-ink-500 font-medium">{d.field}</div>
+              <div className="font-mono tabular text-[12px]">
+                {d.before !== "—" && (
+                  <span className="text-rose-700 line-through opacity-75">
+                    {d.before}
+                  </span>
+                )}
+                {d.before !== "—" && (
+                  <span className="mx-2 text-ink-300">→</span>
+                )}
+                <span
+                  className={`font-semibold ${d.warning ? "text-amber-700" : "text-brand-700"}`}
+                >
+                  {d.after}
                 </span>
-              )}
-              {d.before !== "—" && <span className="mx-2 text-ink-300">→</span>}
-              <span
-                className={`font-semibold ${d.warning ? "text-amber-700" : "text-brand-700"}`}
-              >
-                {d.after}
-              </span>
-            </div>
-            <div className="text-[11px] text-ink-400">{d.source}</div>
-          </div>
-        ))}
+              </div>
+              <div className="text-[11px] text-ink-400 inline-flex items-center gap-1 border-b border-dashed border-ink-300">
+                {d.source} <ArrowRight className="h-2.5 w-2.5" />
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

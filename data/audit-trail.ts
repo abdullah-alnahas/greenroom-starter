@@ -108,12 +108,24 @@ export type CompanionFlag = {
   status: "open" | "acknowledged" | "resolved";
 };
 
+/**
+ * A row in the "What changed since the deal was signed" diff card.
+ *
+ * This is NOT a separate data source — every row projects from one or more
+ * ledger entries (typically a deal_amendment or pre_show_flag). In production
+ * the diff would be computed by filtering audit_log for the show, kind IN
+ * (deal_amendment, pre_show_flag), and rendering the field_change column.
+ *
+ * `sourceEntryIds` are the entry IDs the row was projected from; clicking
+ * the row scrolls to and highlights the underlying ledger entry.
+ */
 export type DealDiff = {
   field: string;
   before: string;
   after: string;
   source: string;
   sourceDate: string;
+  sourceEntryIds: string[];
   warning?: string;
 };
 
@@ -166,36 +178,21 @@ const COASTAL_SPELL: ShowTrail = {
   aiSummary: {
     generatedAt: "2025-03-19T09:30:00Z",
     parts: [
-      "Coastal Spell played March 14, 2025. Deal is ",
+      "Coastal Spell played Mar 14, 2025. Deal: ",
       { text: "$5,000 vs 80% of net", sources: ["entry_deal_email_origin"] },
-      " with expenses capped at $2,500. Two amendments since signing: hospitality cap moved ",
-      {
-        text: "$500 → $700",
-        sources: ["entry_hospitality_amendment"],
-      },
-      " on Mar 3, and a ",
-      {
-        text: "$900 marketing recoup",
-        sources: ["entry_recoup_verbal"],
-      },
-      " was added Mar 5 — verbal only, no written confirmation. Companion flagged the recoup language as ",
-      {
-        text: "ambiguous before show day",
-        sources: ["entry_companion_flag"],
-      },
-      ". Tour manager signed off at the table on the night at ",
+      ", expenses capped $2,500. Two amendments before show — hospitality cap ",
+      { text: "$500 → $700", sources: ["entry_hospitality_amendment"] },
+      " (Mar 3 email), and a ",
+      { text: "$900 marketing recoup", sources: ["entry_recoup_verbal"] },
+      " added Mar 5 (verbal, unconfirmed). Companion ",
+      { text: "flagged the recoup phrase ambiguous", sources: ["entry_companion_flag"] },
+      ": “$900 against gross” could mean inside or outside the $2,500 cap. TM signed at ",
       { text: "$11,565", sources: ["entry_at_table_signoff"] },
-      ". The agent ",
-      {
-        text: "opened a dispute four days later",
-        sources: ["entry_dispute_opened"],
-      },
-      " over the recoup interpretation; resolved Mar 19 on the agent's read, with the ",
-      {
-        text: "venue absorbing $720",
-        sources: ["entry_marcus_resolution"],
-      },
-      ".",
+      " — venue’s read, recoup outside the cap. Four days later, WME ",
+      { text: "disputed", sources: ["entry_dispute_opened"] },
+      " — wanted recoup inside the cap, payout $12,285. GM ",
+      { text: "settled on agent’s read", sources: ["entry_marcus_resolution"] },
+      " Mar 19; venue wired the extra $720 to protect the WME relationship.",
     ],
   },
   affordances: { shareWithTm: true, sendToAgent: true },
@@ -233,15 +230,17 @@ const COASTAL_SPELL: ShowTrail = {
       field: "Hospitality cap",
       before: "$500",
       after: "$700",
-      source: "email",
+      source: "email amendment",
       sourceDate: "2025-03-03",
+      sourceEntryIds: ["entry_hospitality_amendment"],
     },
     {
       field: "Marketing recoup",
       before: "—",
       after: "+$900 added",
-      source: "booker note (verbal w/ Andrea)",
+      source: "verbal w/ Andrea",
       sourceDate: "2025-03-05",
+      sourceEntryIds: ["entry_recoup_verbal"],
       warning: "Verbal only — no written confirmation",
     },
     {
@@ -250,6 +249,7 @@ const COASTAL_SPELL: ShowTrail = {
       after: "Unresolved interpretation",
       source: "Companion flag",
       sourceDate: "2024-12-08",
+      sourceEntryIds: ["entry_companion_flag"],
       warning: "Open at signoff",
     },
   ],
