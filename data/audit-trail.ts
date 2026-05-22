@@ -472,14 +472,19 @@ export function trailStats(trail: ShowTrail) {
     ).length,
     amendments: trail.entries.filter((e) => e.kind === "deal_amendment").length,
   };
-  const first = trail.entries[trail.entries.length - 1];
-  const last = trail.entries[0];
+  // Entries seeded in chronological-ascending order: index 0 is oldest,
+  // last index is newest. Span = newest − oldest.
+  const oldest = trail.entries[0];
+  const newest = trail.entries[trail.entries.length - 1];
   const spanDays =
-    first && last
-      ? Math.round(
-          (new Date(last.occurredAt).getTime() -
-            new Date(first.occurredAt).getTime()) /
-            (1000 * 60 * 60 * 24),
+    oldest && newest
+      ? Math.max(
+          0,
+          Math.round(
+            (new Date(newest.occurredAt).getTime() -
+              new Date(oldest.occurredAt).getTime()) /
+              (1000 * 60 * 60 * 24),
+          ),
         )
       : 0;
   return { ...counts, spanDays };
